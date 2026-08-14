@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSV Insight Generator</title>
+
+  <!-- Google Fonts: Inter (UI text) + JetBrains Mono (numbers / data) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Chart.js via CDN — used to draw histograms, bar, scatter and line charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+  <!-- Papa Parse via CDN — used for reliable CSV parsing (handles quoted commas, edge cases) -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="app-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 19V5M4 19H20M4 19L9 12L13 15L20 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div>
+          <h1>CSV Insight Generator</h1>
+          <p class="tagline">Drop in a CSV, get instant structure, stats and charts — all in your browser.</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ===================== UPLOAD SECTION ===================== -->
+    <section class="card upload-section" id="uploadSection" aria-label="Upload CSV file">
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload CSV by dragging a file here or pressing Enter to browse">
+        <input type="file" id="fileInput" accept=".csv,text/csv" hidden />
+        <svg class="upload-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 16V18C4 19.1046 4.89543 20 6 20H18C19.1046 20 20 19.1046 20 18V16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p class="dropzone-title">Drag &amp; drop your CSV here</p>
+        <p class="dropzone-sub">or</p>
+        <button type="button" class="btn btn-primary" id="browseBtn">Browse files</button>
+        <p class="dropzone-hint">Only .csv files are accepted. Nothing leaves your browser.</p>
+      </div>
+
+      <div class="file-info hidden" id="fileInfo">
+        <div class="file-info-left">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+          <span id="fileName">filename.csv</span>
+          <span class="file-size" id="fileSize"></span>
+        </div>
+        <div class="file-info-right">
+          <button type="button" class="btn btn-ghost" id="removeFileBtn">Remove file</button>
+        </div>
+      </div>
+
+      <div class="alert hidden" id="errorAlert" role="alert"></div>
+      <div class="alert alert-info hidden" id="infoAlert" role="status"></div>
+    </section>
+
+    <!-- ===================== RESULTS (hidden until a valid CSV is loaded) ===================== -->
+    <div id="resultsWrapper" class="hidden">
+
+      <div class="section-toolbar">
+        <h2 class="section-heading">Dashboard</h2>
+        <button type="button" class="btn btn-outline" id="resetBtn">Reset / Upload new CSV</button>
+      </div>
+
+      <!-- ===================== SUMMARY KPI CARDS ===================== -->
+      <section class="kpi-grid" id="kpiGrid" aria-label="Summary statistics"></section>
+
+      <!-- ===================== DATA PREVIEW ===================== -->
+      <section class="card" aria-labelledby="previewHeading">
+        <div class="card-header">
+          <h2 id="previewHeading">Data preview</h2>
+          <p class="card-sub" id="previewSub">First rows of your dataset</p>
+        </div>
+        <div class="table-scroll">
+          <table id="previewTable" class="data-table"></table>
+        </div>
+      </section>
+
+      <!-- ===================== COLUMN INSIGHTS ===================== -->
+      <section class="card" aria-labelledby="columnHeading">
+        <div class="card-header">
+          <h2 id="columnHeading">Column insights</h2>
+          <p class="card-sub">Type detection and per-column statistics</p>
+        </div>
+        <div class="column-grid" id="columnGrid"></div>
+      </section>
+
+      <!-- ===================== DATA QUALITY ===================== -->
+      <section class="card" aria-labelledby="qualityHeading">
+        <div class="card-header">
+          <h2 id="qualityHeading">Data quality</h2>
+          <p class="card-sub">A quick health check of your dataset</p>
+        </div>
+        <div class="quality-layout" id="qualitySection"></div>
+      </section>
+
+      <!-- ===================== VISUALIZATIONS ===================== -->
+      <section class="card" aria-labelledby="chartsHeading">
+        <div class="card-header">
+          <h2 id="chartsHeading">Automatic visualizations</h2>
+          <p class="card-sub">Charts generated based on the columns detected in your data</p>
+        </div>
+        <div class="chart-grid" id="chartGrid"></div>
+        <p class="empty-note hidden" id="noChartsNote">No suitable columns were found to build charts from.</p>
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="app-footer">
+    <div class="container">
+      <p>CSV Insight Generator — all analysis happens locally in your browser. No data is uploaded anywhere.</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
